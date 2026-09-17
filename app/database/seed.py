@@ -1,0 +1,72 @@
+"""
+Development-only database seed.
+
+Creates deterministic local identities required to exercise authenticated
+application flows without an external identity provider.
+
+Never run development seed data in production.
+"""
+
+import asyncio
+from uuid import UUID
+
+from app.core.config import get_settings
+from app.database.connection import close_database_pool, open_database_pool, pool
+
+TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+USER_ID = UUID("22222222-2222-2222-2222-222222222222")
+
+
+async def seed() -> None:
+    """Insert the local development tenant and user."""
+
+    settings = get_settings()
+
+    if settings.app_env != "development":
+        raise RuntimeError("Development seed cannot run outside development")
+
+    await open_database_pool()
+
+    try:
+        async with pool.connection() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    """
+                    INSERT INTO tenants (id, name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (TENANT_ID, "Local Development"),
+                )
+
+                await connection.execute(
+                    """
+                    INSERT INTO users (
+                        id,
+                        tenant_id,
+                        external_identity_id,
+                        name,
+                        email
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (tenant_id, external_identity_id)
+                    DO NOTHING
+                    """,
+                    (
+                        USER_ID,
+                        TENANT_ID,
+                        "local-artur",
+                        "Artur",
+                        "local@example.com",
+                    ),
+                )
+
+    finally:
+        await close_database_pool()
+
+
+if __name__ == "__main__":
+    asyncio.run(
+        seed(),
+        loop_factory=asyncio.SelectorEventLoop,
+    )
