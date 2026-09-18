@@ -42,30 +42,29 @@ async def create_document_with_chunks(
     if len(chunks) != len(embeddings):
         raise ValueError("Every chunk must have exactly one embedding")
 
-    async with pool.connection() as connection:
-        async with connection.transaction():
-            await _insert_document(
-                connection=connection,
-                document_id=document_id,
-                tenant_id=tenant_id,
-                uploaded_by=uploaded_by,
-                filename=filename,
-                content_type=content_type,
-            )
+    async with pool.connection() as connection, connection.transaction():
+        await _insert_document(
+            connection=connection,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            uploaded_by=uploaded_by,
+            filename=filename,
+            content_type=content_type,
+        )
 
-            await _insert_chunks(
-                connection=connection,
-                document_id=document_id,
-                tenant_id=tenant_id,
-                chunks=chunks,
-                embeddings=embeddings,
-            )
+        await _insert_chunks(
+            connection=connection,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
 
-            await _mark_document_ready(
-                connection=connection,
-                document_id=document_id,
-                tenant_id=tenant_id,
-            )
+        await _mark_document_ready(
+            connection=connection,
+            document_id=document_id,
+            tenant_id=tenant_id,
+        )
 
 
 async def _insert_document(
@@ -133,9 +132,10 @@ async def _insert_chunks(
                     chunk,
                     embedding,
                 )
-                for index, (chunk, embedding)
-                in enumerate(zip(chunks, embeddings, strict=True))
-            ]
+                for index, (chunk, embedding) in enumerate(
+                    zip(chunks, embeddings, strict=True)
+                )
+            ],
         )
 
 
@@ -172,10 +172,9 @@ async def search_similar_chunks(
     layer. The LLM therefore cannot retrieve another tenant's documents.
     """
 
-    async with pool.connection() as connection:
-        async with connection.cursor() as cursor:
-            await cursor.execute(
-                """
+    async with pool.connection() as connection, connection.cursor() as cursor:
+        await cursor.execute(
+            """
                 SELECT
                     dc.document_id,
                     d.filename,
@@ -192,17 +191,17 @@ async def search_similar_chunks(
                 ORDER BY dc.embedding <=> %s::vector
                 LIMIT %s
                 """,
-                (
-                    embedding,
-                    tenant_id,
-                    embedding,
-                    max_distance,
-                    embedding,
-                    limit,
-                ),
-            )
+            (
+                embedding,
+                tenant_id,
+                embedding,
+                max_distance,
+                embedding,
+                limit,
+            ),
+        )
 
-            rows = await cursor.fetchall()
+        rows = await cursor.fetchall()
 
     return [
         RetrievalResult(

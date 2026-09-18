@@ -23,9 +23,7 @@ class SourceReference(BaseModel):
 class AssistantResponse(BaseModel):
     """Structured final response produced by the main assistant."""
 
-    answer: str = Field(
-        description="Final answer presented to the user."
-    )
+    answer: str = Field(description="Final answer presented to the user.")
 
     sources: list[SourceReference] = Field(
         default_factory=list,

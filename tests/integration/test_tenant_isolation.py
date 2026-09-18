@@ -28,18 +28,17 @@ async def test_vector_search_does_not_cross_tenant_boundary() -> None:
     vector = [0.1] * 1536
 
     try:
-        async with pool.connection() as connection:
-            async with connection.transaction():
-                await connection.execute(
-                    """
+        async with pool.connection() as connection, connection.transaction():
+            await connection.execute(
+                """
                     INSERT INTO tenants (id, name)
                     VALUES (%s, 'Tenant A'), (%s, 'Tenant B')
                     """,
-                    (tenant_a, tenant_b),
-                )
+                (tenant_a, tenant_b),
+            )
 
-                await connection.execute(
-                    """
+            await connection.execute(
+                """
                     INSERT INTO users (
                         id,
                         tenant_id,
@@ -51,11 +50,11 @@ async def test_vector_search_does_not_cross_tenant_boundary() -> None:
                         (%s, %s, 'user-a', 'User A', 'a@test.local'),
                         (%s, %s, 'user-b', 'User B', 'b@test.local')
                     """,
-                    (user_a, tenant_a, user_b, tenant_b),
-                )
+                (user_a, tenant_a, user_b, tenant_b),
+            )
 
-                await connection.execute(
-                    """
+            await connection.execute(
+                """
                     INSERT INTO documents (
                         id,
                         tenant_id,
@@ -67,18 +66,18 @@ async def test_vector_search_does_not_cross_tenant_boundary() -> None:
                         (%s, %s, %s, 'tenant-a.txt', 'ready'),
                         (%s, %s, %s, 'tenant-b.txt', 'ready')
                     """,
-                    (
-                        document_a,
-                        tenant_a,
-                        user_a,
-                        document_b,
-                        tenant_b,
-                        user_b,
-                    ),
-                )
+                (
+                    document_a,
+                    tenant_a,
+                    user_a,
+                    document_b,
+                    tenant_b,
+                    user_b,
+                ),
+            )
 
-                await connection.execute(
-                    """
+            await connection.execute(
+                """
                     INSERT INTO document_chunks (
                         id,
                         tenant_id,
@@ -91,17 +90,17 @@ async def test_vector_search_does_not_cross_tenant_boundary() -> None:
                         (%s, %s, %s, 0, 'SECRET A', %s),
                         (%s, %s, %s, 0, 'SECRET B', %s)
                     """,
-                    (
-                        uuid4(),
-                        tenant_a,
-                        document_a,
-                        vector,
-                        uuid4(),
-                        tenant_b,
-                        document_b,
-                        vector,
-                    ),
-                )
+                (
+                    uuid4(),
+                    tenant_a,
+                    document_a,
+                    vector,
+                    uuid4(),
+                    tenant_b,
+                    document_b,
+                    vector,
+                ),
+            )
 
         results = await search_similar_chunks(
             tenant_id=tenant_a,
@@ -110,24 +109,18 @@ async def test_vector_search_does_not_cross_tenant_boundary() -> None:
             max_distance=0.8,
         )
 
-        assert any(
-            result.content == "SECRET A"
-            for result in results
-        )
+        assert any(result.content == "SECRET A" for result in results)
 
-        assert all(
-            result.content != "SECRET B"
-            for result in results
-        )
+        assert all(result.content != "SECRET B" for result in results)
 
     finally:
-        async with pool.connection() as connection:
-            async with connection.transaction():
-                await connection.execute(
-                    "DELETE FROM tenants WHERE id IN (%s, %s)",
-                    (tenant_a, tenant_b),
-                )
-        
+        async with pool.connection() as connection, connection.transaction():
+            await connection.execute(
+                "DELETE FROM tenants WHERE id IN (%s, %s)",
+                (tenant_a, tenant_b),
+            )
+
+
 @pytest.mark.asyncio
 async def test_document_cannot_reference_user_from_another_tenant() -> None:
     """The database must reject cross-tenant document ownership."""

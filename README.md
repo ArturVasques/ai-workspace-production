@@ -50,3 +50,8 @@ AI Agent
           │
           ▼
    Structured Output
+```
+
+See `HELPER.md` for local development, testing (unit vs. integration),
+linting/type-checking and Docker commands, and `docs/ARCHITECTURE.md` for
+the full architecture reference.

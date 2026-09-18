@@ -11,8 +11,9 @@ The API is asynchronous, so database I/O also uses psycopg's
 AsyncConnectionPool instead of blocking the event loop with synchronous I/O.
 """
 
-from psycopg_pool import AsyncConnectionPool
 from pgvector.psycopg import register_vector_async
+from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -21,7 +22,7 @@ settings = get_settings()
 logger = get_logger()
 
 
-async def configure_connection(connection) -> None:
+async def configure_connection(connection: AsyncConnection) -> None:
     """Register pgvector types on every connection created by the pool."""
     await register_vector_async(connection)
 

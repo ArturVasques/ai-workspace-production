@@ -10,6 +10,7 @@ Azure Monitor / Application Insights.
 
 import logging
 import sys
+from typing import Any
 
 import structlog
 
@@ -40,6 +41,12 @@ def configure_logging() -> None:
     )
 
 
-def get_logger():
-    """Return a structured application logger."""
+def get_logger() -> Any:
+    """
+    Return a structured application logger.
+
+    structlog's lazy proxy resolves to the configured wrapper class
+    (structlog.stdlib.BoundLogger) only on first use, so `Any` is the
+    honest static type here rather than a class we don't fully control.
+    """
     return structlog.get_logger()

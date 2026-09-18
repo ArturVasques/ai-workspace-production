@@ -10,7 +10,8 @@ Never run development seed data in production.
 import asyncio
 from uuid import UUID
 
-from app.core.config import get_settings
+from app.core.config import AppEnv, get_settings
+from app.core.event_loop import loop_factory
 from app.database.connection import close_database_pool, open_database_pool, pool
 
 TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -22,25 +23,24 @@ async def seed() -> None:
 
     settings = get_settings()
 
-    if settings.app_env != "development":
+    if settings.app_env != AppEnv.DEVELOPMENT:
         raise RuntimeError("Development seed cannot run outside development")
 
     await open_database_pool()
 
     try:
-        async with pool.connection() as connection:
-            async with connection.transaction():
-                await connection.execute(
-                    """
+        async with pool.connection() as connection, connection.transaction():
+            await connection.execute(
+                """
                     INSERT INTO tenants (id, name)
                     VALUES (%s, %s)
                     ON CONFLICT (id) DO NOTHING
                     """,
-                    (TENANT_ID, "Local Development"),
-                )
+                (TENANT_ID, "Local Development"),
+            )
 
-                await connection.execute(
-                    """
+            await connection.execute(
+                """
                     INSERT INTO users (
                         id,
                         tenant_id,
@@ -52,14 +52,14 @@ async def seed() -> None:
                     ON CONFLICT (tenant_id, external_identity_id)
                     DO NOTHING
                     """,
-                    (
-                        USER_ID,
-                        TENANT_ID,
-                        "local-artur",
-                        "Artur",
-                        "local@example.com",
-                    ),
-                )
+                (
+                    USER_ID,
+                    TENANT_ID,
+                    "local-artur",
+                    "Artur",
+                    "local@example.com",
+                ),
+            )
 
     finally:
         await close_database_pool()
@@ -68,5 +68,5 @@ async def seed() -> None:
 if __name__ == "__main__":
     asyncio.run(
         seed(),
-        loop_factory=asyncio.SelectorEventLoop,
+        loop_factory=loop_factory,
     )

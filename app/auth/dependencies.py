@@ -19,7 +19,8 @@ from uuid import UUID
 from fastapi import Header, HTTPException, status
 
 from app.auth.context import AppContext
-from app.core.config import get_settings
+from app.auth.permissions import DOCUMENTS_CREATE, KNOWLEDGE_READ, PROFILE_READ
+from app.core.config import AppEnv, get_settings
 
 settings = get_settings()
 
@@ -33,9 +34,14 @@ async def get_app_context(
 
     Production implementations must derive identity from a validated token,
     never from caller-controlled identity headers.
+
+    Development header authentication is possible only when APP_ENV is
+    exactly `development`. There is no default APP_ENV: an unset or
+    misconfigured value fails settings loading at startup instead of
+    silently falling back to a permissive mode.
     """
 
-    if settings.app_env != "development":
+    if settings.app_env != AppEnv.DEVELOPMENT:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Production identity provider is not configured",
@@ -52,8 +58,9 @@ async def get_app_context(
         tenant_id=x_tenant_id,
         permissions=frozenset(
             {
-                "knowledge:read",
-                "documents:create",
+                KNOWLEDGE_READ,
+                DOCUMENTS_CREATE,
+                PROFILE_READ,
             }
         ),
     )

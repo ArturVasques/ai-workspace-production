@@ -24,19 +24,18 @@ async def get_user_by_id(
 ) -> UserProfile | None:
     """Return a user only when they belong to the supplied tenant."""
 
-    async with pool.connection() as connection:
-        async with connection.cursor() as cursor:
-            await cursor.execute(
-                """
+    async with pool.connection() as connection, connection.cursor() as cursor:
+        await cursor.execute(
+            """
                 SELECT id, name, email
                 FROM users
                 WHERE id = %s
                   AND tenant_id = %s
                 """,
-                (user_id, tenant_id),
-            )
+            (user_id, tenant_id),
+        )
 
-            row = await cursor.fetchone()
+        row = await cursor.fetchone()
 
     if row is None:
         return None

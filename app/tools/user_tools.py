@@ -11,6 +11,7 @@ Used by:
 from agents import RunContextWrapper, function_tool
 
 from app.auth.context import AppContext
+from app.auth.permissions import PROFILE_READ
 from app.repositories.user_repository import get_user_by_id
 
 
@@ -20,6 +21,9 @@ async def get_my_profile(
 ) -> str:
     """Get the authenticated user's application profile."""
 
+    if not context.context.has_permission(PROFILE_READ):
+        return "Permission denied."
+
     user = await get_user_by_id(
         user_id=context.context.user_id,
         tenant_id=context.context.tenant_id,
@@ -28,7 +32,4 @@ async def get_my_profile(
     if user is None:
         return "Authenticated user profile was not found."
 
-    return (
-        f"Name: {user.name}\n"
-        f"Email: {user.email}"
-    )
+    return f"Name: {user.name}\nEmail: {user.email}"

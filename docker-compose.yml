@@ -19,15 +19,16 @@ services:
       dockerfile: Dockerfile
     command: ["alembic", "upgrade", "head"]
     environment:
+      # Alembic only needs AppSettings (see app/core/config.py); it never
+      # constructs AISettings, so no OPENAI_* variables are required here.
+      APP_ENV: production
+      LOG_LEVEL: INFO
+
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       POSTGRES_DB: ai_workspace_production
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL}
 
       RAG_TOP_K: 5
       RAG_MAX_DISTANCE: 0.8
@@ -56,7 +57,10 @@ services:
       RAG_TOP_K: 5
       RAG_MAX_DISTANCE: 0.8
     ports:
-      - "8000:8000"
+      # Override with API_PORT for a separate stack (e.g. a smoke test run
+      # with `docker compose -p aiws-smoke`) so it does not collide with an
+      # already-running default stack on 8000.
+      - "${API_PORT:-8000}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully

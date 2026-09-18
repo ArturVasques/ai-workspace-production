@@ -1,28 +1,29 @@
 ai-workspace-production/
 │
 ├── app/
-│   ├── api/                 # HTTP boundary / FastAPI routers
-│   ├── agents/              # Agent definitions
-│   ├── auth/                # Authentication + authorization
-│   ├── core/                # Config, logging, shared infrastructure
-│   ├── database/            # Pool, DB lifecycle
-│   ├── models/              # Database models/entities
-│   ├── repositories/        # PostgreSQL access
-│   ├── schemas/             # Pydantic API/AI contracts
+│   ├── api/                 # HTTP boundary / FastAPI routers + error handlers (errors.py)
+│   ├── agents/               # Agent definitions
+│   ├── auth/                 # Authentication, authorization, permission constants (permissions.py)
+│   ├── core/                 # Config, logging, middleware, event loop, shared infrastructure (middleware.py, event_loop.py)
+│   ├── database/              # Pool, DB lifecycle, dev seed
+│   ├── repositories/          # PostgreSQL access
+│   ├── schemas/                # Pydantic API/AI contracts
 │   ├── services/
-│   │   ├── ai/              # Model/Agent execution
-│   │   ├── rag/             # Retrieval + ingestion
-│   │   └── documents/
-│   ├── tools/               # Agent tools
-│   └── workers/             # Background processing
+│   │   ├── ai/                # Model/Agent execution
+│   │   ├── rag/                # Retrieval + chunking
+│   │   └── documents/          # Ingestion orchestration
+│   └── tools/                  # Agent tools
 │
-├── migrations/              # Alembic DB migrations
+├── migrations/               # Alembic DB migrations
 ├── tests/
-│   ├── unit/
-│   └── integration/
-├── evals/                   # AI quality evaluation
+│   ├── unit/                  # No database required (see tests/conftest.py)
+│   ├── integration/            # Real PostgreSQL/pgvector (see tests/integration/conftest.py)
+│   │   └── conftest.py         # Database pool fixture for the integration suite
+├── evals/                     # AI quality evaluation
 ├── docs/
-│   └── ARCHITECTURE.md
+│   ├── ARCHITECTURE.md
+│   ├── FOLD_STRUCTURE.md       # This file
+│   └── CODESTYLE.md            # Code style and patterns
 │
 ├── .github/
 │   └── workflows/
@@ -30,6 +31,7 @@ ai-workspace-production/
 │
 ├── Dockerfile
 ├── docker-compose.yml
+├── requirements.txt          # Pinned production dependency lock used by Dockerfile
 ├── .dockerignore
 ├── .gitignore
 ├── .env.example

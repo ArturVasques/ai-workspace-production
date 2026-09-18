@@ -14,12 +14,12 @@ Used by:
 from agents import Agent
 
 from app.auth.context import AppContext
-from app.core.config import get_settings
+from app.core.config import get_ai_settings
 from app.schemas.assistant import AssistantResponse
 from app.tools.knowledge_tools import search_knowledge
 from app.tools.user_tools import get_my_profile
 
-settings = get_settings()
+settings = get_ai_settings()
 
 
 assistant_agent = Agent[AppContext](

@@ -9,6 +9,8 @@ Runs real AI requests and checks:
 import asyncio
 
 from app.auth.context import AppContext
+from app.auth.permissions import DOCUMENTS_CREATE, KNOWLEDGE_READ, PROFILE_READ
+from app.core.event_loop import loop_factory
 from app.database.connection import close_database_pool, open_database_pool
 from app.database.seed import TENANT_ID, USER_ID
 from app.services.ai.agent_service import run_assistant
@@ -21,7 +23,9 @@ async def run() -> None:
         tenant_id=TENANT_ID,
         permissions=frozenset(
             {
-                "knowledge:read",
+                KNOWLEDGE_READ,
+                DOCUMENTS_CREATE,
+                PROFILE_READ,
             }
         ),
     )
@@ -40,8 +44,7 @@ async def run() -> None:
             answer = response.answer.lower()
 
             concepts_ok = all(
-                concept.lower() in answer
-                for concept in case["required_concepts"]
+                concept.lower() in answer for concept in case["required_concepts"]
             )
 
             source_ok = any(
@@ -73,5 +76,5 @@ async def run() -> None:
 if __name__ == "__main__":
     asyncio.run(
         run(),
-        loop_factory=asyncio.SelectorEventLoop,
+        loop_factory=loop_factory,
     )

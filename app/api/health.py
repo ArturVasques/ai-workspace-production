@@ -31,10 +31,9 @@ async def readiness() -> dict[str, str]:
     """Return success only when required infrastructure is available."""
 
     try:
-        async with pool.connection() as connection:
-            async with connection.cursor() as cursor:
-                await cursor.execute("SELECT 1")
-                await cursor.fetchone()
+        async with pool.connection() as connection, connection.cursor() as cursor:
+            await cursor.execute("SELECT 1")
+            await cursor.fetchone()
 
         return {"status": "ready"}
 

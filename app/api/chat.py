@@ -14,10 +14,9 @@ from fastapi import APIRouter, Depends
 
 from app.auth.context import AppContext
 from app.auth.dependencies import get_app_context
+from app.schemas.assistant import AssistantResponse
 from app.schemas.chat import ChatRequest
 from app.services.ai.agent_service import run_assistant
-
-from app.schemas.assistant import AssistantResponse
 
 router = APIRouter(
     prefix="/chat",

@@ -12,6 +12,7 @@ Used by:
 from agents import RunContextWrapper, function_tool
 
 from app.auth.context import AppContext
+from app.auth.permissions import KNOWLEDGE_READ
 from app.services.rag.retrieval_service import retrieve_knowledge
 
 
@@ -26,8 +27,8 @@ async def search_knowledge(
     Use this when answering questions that require company or application
     knowledge not available from the user's message.
     """
-    
-    if not context.context.has_permission("knowledge:read"):
+
+    if not context.context.has_permission(KNOWLEDGE_READ):
         return "Permission denied."
 
     results = await retrieve_knowledge(

@@ -137,11 +137,7 @@ The API should not contain retrieval algorithms or database queries.
 Creates trusted application context:
 
 ```python
-AppContext(
-    user_id=...,
-    tenant_id=...,
-    permissions=...
-)
+AppContext(user_id=..., tenant_id=..., permissions=...)
 ```
 
 This context is created by application code, not by the LLM.
@@ -394,11 +390,7 @@ What are they allowed to do?
 The authenticated identity becomes:
 
 ```python
-AppContext(
-    user_id=...,
-    tenant_id=...,
-    permissions=...
-)
+AppContext(user_id=..., tenant_id=..., permissions=...)
 ```
 
 From this point onward, tools can receive trusted identity without asking the model for it.
@@ -914,6 +906,23 @@ Document embedding → create once, store
 Query embedding    → create when searching
 ```
 
+#### Embedding Model / Vector Dimension Contract
+
+`OPENAI_EMBEDDING_MODEL` is not a free-form value. The `document_chunks`
+table has a fixed `VECTOR(1536)` column, so the configured embedding model
+must produce exactly 1536-dimension vectors.
+
+`app/core/config.py` maintains an explicit `EMBEDDING_MODEL_DIMENSIONS`
+mapping and validates it at settings-load time (`AISettings`). Configuring
+an unsupported model, or a model whose dimension does not match the schema,
+fails application startup immediately with a clear error instead of failing
+later with an opaque pgvector dimension-mismatch error on first ingestion.
+
+Switching to a model with a different dimension is an intentional,
+coordinated change: it requires a schema migration for the `embedding`
+column and re-embedding every existing document chunk. That re-embedding
+tooling does not exist yet.
+
 ### HNSW
 
 PostgreSQL stores the vectors using pgvector.
@@ -932,6 +941,35 @@ pgvector
 HNSW
 → index that accelerates nearest-neighbour search
 ```
+
+#### HNSW, Tenant Filtering and LIMIT
+
+`search_similar_chunks` filters `WHERE tenant_id = ...` in the same query
+that orders by vector distance and applies `LIMIT`. Because HNSW is an
+*approximate* nearest-neighbour index, PostgreSQL first finds approximate
+nearest neighbours in the index and then post-filters by `tenant_id` (and by
+`max_distance`). In a tenant with very few chunks, or a query whose nearest
+neighbours mostly belong to other tenants, this post-filtering can return
+fewer than `LIMIT` rows even though enough tenant-owned chunks exist further
+down the similarity ranking.
+
+This is a correctness/performance trade-off inherent to approximate indexes,
+not a bug. The levers that control it are:
+
+```text
+hnsw.ef_search        → how many candidates HNSW examines per query.
+                         Higher = more candidates survive tenant
+                         post-filtering, at the cost of latency.
+
+hnsw.iterative_scan    → lets PostgreSQL keep scanning the index for more
+                         candidates when a WHERE filter removes too many
+                         of the initial results, instead of returning
+                         fewer rows than LIMIT.
+```
+
+Neither is configured today; both are one-line `SET` statements to tune per
+tenant/workload if under-filled retrieval results become an observed
+problem. Tune only after measuring, not preemptively.
 
 ---
 
@@ -1232,6 +1270,27 @@ The current project performs small text ingestion synchronously.
 
 Background processing is an architectural extension for larger production workloads.
 
+### On the `processing` → `ready` Transition
+
+`document_repository.create_document_with_chunks` inserts the document as
+`processing`, inserts its chunks, then updates the status to `ready`, all
+inside one transaction. Because the transaction is atomic, no reader can
+ever observe a document sitting in `processing` today: it is either not
+committed yet (invisible to other transactions) or already `ready`. The
+intermediate `processing` state exists in the schema but is not currently
+observable.
+
+This is intentional and correct for synchronous ingestion, and is kept as
+is. The `processing` state becomes observable, and meaningful, only once
+ingestion moves to the asynchronous worker architecture described above:
+the API would insert the document as `processing` and return `202
+Accepted` in one (short) transaction, a worker would chunk/embed/persist
+chunks and flip the status to `ready` in a separate, later transaction, and
+readers could legitimately see a document sitting in `processing` while
+the worker runs. Retrieval already excludes non-`ready` documents
+(`search_similar_chunks` filters `WHERE d.status = 'ready'`), so that
+filter does not need to change when this happens.
+
 ---
 
 ## 14. Caching and Cost Control
@@ -1434,7 +1493,133 @@ This makes rollback and incident investigation substantially easier.
 
 ---
 
-## 18. Production Security Principles
+## 18. Operational Hardening
+
+The application enforces several operational safeguards to prevent silent failures and ensure observability.
+
+### Request Correlation
+
+Every HTTP request is assigned a request ID (`X-Request-ID` header). The ID is either:
+
+```text
+supplied by the caller (trusted only as a correlation hint)
+       ↓
+propagated as-is in the response, or
+
+generated freshly if missing
+       ↓
+bound to every structured log line via structlog contextvars
+```
+
+This allows traces across logs, error responses, and external systems even when containers restart or load balancers route the same logical request to different instances.
+
+The request ID is also stored on `request.state` so that error handlers (which lie outside the middleware's control) can include it in every error response, including 500 errors.
+
+### Error Response Contract
+
+All HTTP error responses follow a uniform contract:
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "..."
+}
+```
+
+with the `X-Request-ID` header.
+
+The error codes are:
+
+| Code | Status | Cause |
+|---|---|---|
+| VALIDATION_ERROR | 400 | Domain `ValueError` raised by a service |
+| UPSTREAM_ERROR | 502 | `AssistantContractError` from agent output validation |
+| INTERNAL_ERROR | 500 | Unexpected exception; details logged, message masked from client |
+
+This allows clients to:
+
+```text
+distinguish validation failures (retry with corrected input)
+     ↓
+from upstream AI model failures (backoff and retry)
+     ↓
+from application bugs (alert and investigate with the request ID)
+```
+
+### Configuration Fail-Safes
+
+`APP_ENV` is required and has no default. An unset value causes application startup to fail instead of silently falling back to a permissive mode.
+
+```python
+app_env: AppEnv  # no default; missing value raises an error
+```
+
+Configuration is also split by concern:
+
+```text
+AppSettings
+  ├── Application / runtime
+  ├── PostgreSQL
+  └── RAG
+      (no OpenAI dependency)
+
+AISettings
+  └── OpenAI model configuration
+```
+
+This allows infrastructure code (Alembic migrations, the database connection pool) to load configuration without an OpenAI API key present.
+
+### Windows Event Loop
+
+psycopg cannot run in async mode on Windows' default `ProactorEventLoop`. A custom loop factory in `app/core/event_loop.py` ensures that:
+
+```text
+uvicorn --loop app.core.event_loop:loop_factory
+```
+
+uses `SelectorEventLoop` on Windows (default elsewhere).
+
+The same factory is reused by seed scripts, evaluations, and the integration test suite so all async database operations use the correct event loop.
+
+### Docker and Dependency Caching
+
+The `Dockerfile` installs `requirements.txt` (a pinned dependency lock) before copying application source:
+
+```text
+Dockerfile
+  ├── FROM python:3.13-slim
+  ├── COPY requirements.txt  ← its own layer
+  ├── RUN pip install
+  │
+  ├── COPY app, pyproject.toml, migrations
+  └── RUN pip install .
+```
+
+An application code change only rebuilds the small final layer. Dependency changes require `pip freeze > requirements.txt` and rebuild the entire image.
+
+The image runs as a non-root user (`appuser`) and exposes a `HEALTHCHECK` at `/health/live`.
+
+### CI Gates
+
+The CI pipeline enforces quality gates before Docker builds:
+
+```text
+Ruff lint ✓
+Ruff format ✓
+mypy type check ✓
+     ↓
+Unit tests (no database)
+     ↓
+Integration tests (real PostgreSQL + pgvector)
+     ↓
+Docker build
+```
+
+Failed linting, type-checking, or tests block the build. Coverage reports are available per-run.
+
+---
+
+## 19. Production Security Principles
 
 ### The LLM Is Never the Security Layer
 
@@ -1499,7 +1684,7 @@ Production secrets can be provided through Key Vault and managed identities wher
 
 ---
 
-## 19. Core Design Principles
+## 20. Core Design Principles
 
 The architecture can be summarized by the following rules:
 

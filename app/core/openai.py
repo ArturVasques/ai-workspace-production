@@ -10,8 +10,8 @@ Imported by:
 
 from agents import set_default_openai_key
 
-from app.core.config import get_settings
+from app.core.config import get_ai_settings
 
-settings = get_settings()
+settings = get_ai_settings()
 
 set_default_openai_key(settings.openai_api_key)

@@ -12,9 +12,9 @@ Document ingestion uses batching to avoid one API request per chunk.
 
 from openai import AsyncOpenAI
 
-from app.core.config import get_settings
+from app.core.config import get_ai_settings
 
-settings = get_settings()
+settings = get_ai_settings()
 
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 

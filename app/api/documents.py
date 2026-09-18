@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.auth.context import AppContext
 from app.auth.dependencies import get_app_context
+from app.auth.permissions import DOCUMENTS_CREATE
 from app.schemas.document import DocumentUploadResponse
 from app.services.documents.ingestion_service import ingest_document
 
@@ -33,13 +34,17 @@ async def upload_document(
 ) -> DocumentUploadResponse:
     """Ingest a small text document into the authenticated tenant."""
 
-    if not context.has_permission("documents:create"):
+    if not context.has_permission(DOCUMENTS_CREATE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions",
         )
 
-    if file.content_type not in {"text/plain"}:
+    # Compare the media type only; parameters such as "; charset=utf-8" are
+    # a valid part of the same content type and must not cause a rejection.
+    media_type = (file.content_type or "").split(";", 1)[0].strip()
+
+    if media_type != "text/plain":
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Only UTF-8 text files are currently supported",
@@ -56,7 +61,9 @@ async def upload_document(
         )
 
     try:
-        content = content_bytes.decode("utf-8")
+        # utf-8-sig transparently strips a leading BOM when present and
+        # behaves exactly like utf-8 otherwise.
+        content = content_bytes.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -67,7 +74,7 @@ async def upload_document(
         tenant_id=context.tenant_id,
         uploaded_by=context.user_id,
         filename=file.filename or "document.txt",
-        content_type=file.content_type,
+        content_type=media_type,
         content=content,
     )
 

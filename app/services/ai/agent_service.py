@@ -16,6 +16,17 @@ from app.auth.context import AppContext
 from app.schemas.assistant import AssistantResponse
 
 
+class AssistantContractError(Exception):
+    """
+    Raised when the agent's structured output does not match the declared
+    contract (AssistantResponse).
+
+    Kept as its own exception type (rather than a bare TypeError) so
+    app/api/errors.py can map exactly this failure to a 502, without also
+    catching unrelated TypeErrors raised elsewhere in the request path.
+    """
+
+
 async def run_assistant(
     *,
     message: str,
@@ -32,8 +43,6 @@ async def run_assistant(
     output = result.final_output
 
     if not isinstance(output, AssistantResponse):
-        raise TypeError(
-            "Assistant returned an unexpected output type"
-        )
+        raise AssistantContractError("Assistant returned an unexpected output type")
 
     return output

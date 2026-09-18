@@ -1,35 +1,7 @@
 """
-Shared pytest configuration.
+Shared pytest configuration for the whole test suite.
 
-The database pool follows the same lifecycle as the production application:
-it is opened once for the test session and closed when the session finishes.
-
-Windows requires the Selector event loop for psycopg async support.
+Unit tests (tests/unit) must be runnable with no database reachable, so the
+database pool lifecycle lives only in tests/integration/conftest.py, not
+here. Do not add a database-dependent fixture to this file.
 """
-
-import asyncio
-import sys
-
-import pytest_asyncio
-
-from app.database.connection import (
-    close_database_pool,
-    open_database_pool,
-)
-
-
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(
-        asyncio.WindowsSelectorEventLoopPolicy()
-    )
-
-
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def database_pool():
-    """Keep the shared database pool alive for the complete test session."""
-
-    await open_database_pool()
-
-    yield
-
-    await close_database_pool()

@@ -6,7 +6,19 @@ We verify important concepts and source grounding instead of expecting
 an exact sentence from the model.
 """
 
-EVAL_CASES = [
+from typing import TypedDict
+
+
+class EvalCase(TypedDict):
+    """One evaluation case for the AI assistant."""
+
+    name: str
+    question: str
+    expected_source: str
+    required_concepts: list[str]
+
+
+EVAL_CASES: list[EvalCase] = [
     {
         "name": "poor_recovery_uses_internal_knowledge",
         "question": (
