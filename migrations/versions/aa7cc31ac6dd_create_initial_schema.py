@@ -1,18 +1,17 @@
 """create initial schema
 
 Revision ID: aa7cc31ac6dd
-Revises: 
+Revises:
 Create Date: 2026-09-17 17:53:04.036128
-
 """
+
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'aa7cc31ac6dd'
+revision: str = "aa7cc31ac6dd"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -20,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create the initial production database schema."""
-    
+
     # pgvector is part of the database schema requirements.
     # A fresh environment must not require manual setup.
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
@@ -36,12 +35,16 @@ def upgrade() -> None:
     op.execute("""
         CREATE TABLE users (
             id UUID PRIMARY KEY,
-            tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            tenant_id UUID NOT NULL
+                REFERENCES tenants(id)
+                ON DELETE CASCADE,
+
             external_identity_id TEXT NOT NULL,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
+            UNIQUE (tenant_id, id),
             UNIQUE (tenant_id, external_identity_id),
             UNIQUE (tenant_id, email)
         )
@@ -50,26 +53,45 @@ def upgrade() -> None:
     op.execute("""
         CREATE TABLE documents (
             id UUID PRIMARY KEY,
-            tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-            uploaded_by UUID NOT NULL REFERENCES users(id),
+
+            tenant_id UUID NOT NULL
+                REFERENCES tenants(id)
+                ON DELETE CASCADE,
+
+            uploaded_by UUID NOT NULL,
+
             filename TEXT NOT NULL,
             content_type TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            UNIQUE (tenant_id, id),
+
+            FOREIGN KEY (tenant_id, uploaded_by)
+                REFERENCES users (tenant_id, id)
         )
     """)
 
     op.execute("""
         CREATE TABLE document_chunks (
             id UUID PRIMARY KEY,
-            tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-            document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+
+            tenant_id UUID NOT NULL
+                REFERENCES tenants(id)
+                ON DELETE CASCADE,
+
+            document_id UUID NOT NULL,
+
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
             embedding VECTOR(1536) NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-            UNIQUE (document_id, chunk_index)
+            UNIQUE (document_id, chunk_index),
+
+            FOREIGN KEY (tenant_id, document_id)
+                REFERENCES documents (tenant_id, id)
+                ON DELETE CASCADE
         )
     """)
 

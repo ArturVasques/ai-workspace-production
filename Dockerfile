@@ -1,25 +1,21 @@
 # Lightweight Python runtime for the FastAPI application.
 FROM python:3.13-slim
 
-# All following commands run inside /app in the container.
 WORKDIR /app
 
-# Copy dependency definition first.
-# This allows Docker to reuse the dependency layer when application code changes.
+# Copy the package definition and application source before installation.
 COPY pyproject.toml .
+COPY app ./app
 
-# Install the application dependencies.
+# Install the application and its production dependencies.
 RUN pip install --no-cache-dir .
 
-# Copy the application source code and migrations.
-COPY app ./app
+# Runtime files required by the application and Alembic.
 COPY migrations ./migrations
 COPY alembic.ini .
 COPY main.py .
 
-# Document the port used by FastAPI.
 EXPOSE 8000
 
-# Production server command.
-# No --reload: containers are immutable deployment units.
+# Production containers run without development auto-reload.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
