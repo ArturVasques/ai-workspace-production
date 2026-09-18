@@ -11,10 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Now copy the package definition and application source and install the
 # local package itself. --no-deps avoids re-resolving/re-downloading the
-# dependencies already installed above.
+# dependencies already installed above. `pip check` then fails the build if
+# requirements.txt has drifted from pyproject.toml (a dependency declared
+# there but missing or incompatible in the pinned lock).
 COPY pyproject.toml .
 COPY app ./app
-RUN pip install --no-cache-dir --no-deps .
+RUN pip install --no-cache-dir --no-deps . && pip check
 
 # Runtime files required by the application and Alembic.
 COPY migrations ./migrations

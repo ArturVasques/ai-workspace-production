@@ -18,7 +18,6 @@ dependencies = [
     "pgvector",
     "alembic",
     "python-multipart",
-    "httpx",
     "structlog",
 ]
 
@@ -27,6 +26,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "httpx",
     "ruff",
     "mypy",
 ]

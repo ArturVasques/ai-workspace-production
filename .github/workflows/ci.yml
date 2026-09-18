@@ -37,13 +37,16 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # AppSettings requires these, but no OpenAI configuration: the unit
-      # suite never touches AI settings, imports agents, or needs a
-      # database (see app/core/config.py and tests/conftest.py).
+      # No PostgreSQL service is attached to this job on purpose and
+      # POSTGRES_PORT points at a closed port: the unit suite must pass with
+      # no database reachable. The OpenAI key is a placeholder that is never
+      # used for a call; it only satisfies AISettings when the HTTP-level
+      # tests import the application.
       APP_ENV: test
       LOG_LEVEL: INFO
       POSTGRES_PORT: "1"
       POSTGRES_PASSWORD: unused-in-unit-tests
+      OPENAI_API_KEY: unit-tests-never-call-openai
 
     steps:
       - name: Checkout repository
@@ -113,13 +116,53 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -v
 
-  docker:
+  docker-smoke:
     runs-on: ubuntu-latest
     needs: [quality, unit-tests, integration-tests]
+
+    env:
+      # Placeholder only: the smoke test never calls OpenAI. It exists so the
+      # api service can start (AISettings requires a non-empty key).
+      OPENAI_API_KEY: ci-smoke-never-calls-openai
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t ai-workspace-production:${{ github.sha }} .
+      - name: Build images and start the stack
+        run: docker compose up --build --detach
+
+      - name: Wait for the API to be ready
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:8000/health/ready; then
+              echo
+              echo "API ready after ${attempt} attempts"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "API did not become ready in time"
+          exit 1
+
+      - name: Assert container healthcheck and non-root user
+        run: |
+          for attempt in $(seq 1 20); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q api)")
+            [ "$status" = "healthy" ] && break
+            sleep 3
+          done
+          echo "healthcheck: $status"
+          [ "$status" = "healthy" ]
+          docker compose exec -T api id -u | grep -qv '^0$'
+
+      - name: Seed the development tenant inside the container
+        run: docker compose run --rm --no-deps api python -m app.database.seed
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes --remove-orphans

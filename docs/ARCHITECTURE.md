@@ -1569,6 +1569,24 @@ AISettings
 
 This allows infrastructure code (Alembic migrations, the database connection pool) to load configuration without an OpenAI API key present.
 
+### Environments
+
+`APP_ENV` selects one of three runtime modes. Each has its own identity model and its own configuration source:
+
+```text
+development          test                 production
+─────────────        ─────────────        ─────────────────────────
+laptop               CI runner            container platform
+.env or compose      workflow env         platform-injected env,
+                                          Key Vault, App Configuration
+header identity      no identity          validated JWT
+(no IdP)             (repository tests)   (header identity rejected)
+```
+
+`docker-compose.yml` belongs exclusively to the first column. It inlines `APP_ENV=development`, throwaway database credentials and a plain HTTP port, and it is documented as such in the file itself. There is intentionally no production compose file: production runs the same image built from the `Dockerfile` with `APP_ENV=production`, and every setting arrives from the platform rather than from a file in the repository.
+
+With `APP_ENV=production` and no identity provider configured, authenticated endpoints return `501 Not Implemented`. The application fails closed rather than falling back to development identity.
+
 ### Windows Event Loop
 
 psycopg cannot run in async mode on Windows' default `ProactorEventLoop`. A custom loop factory in `app/core/event_loop.py` ensures that:

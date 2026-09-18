@@ -86,10 +86,11 @@ Configuration is loaded via cached getters, never via module-level environment v
 from app.core.config import get_settings
 
 settings = get_settings()
-chunk_size = settings.rag_chunk_size
+top_k = settings.rag_top_k
 
 # Bad
 import os
+
 CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "512"))  # No!
 ```
 
@@ -133,6 +134,7 @@ Agent tools check permissions explicitly using constants from `app/auth/permissi
 
 ```python
 from app.auth.permissions import KNOWLEDGE_READ
+
 
 @function_tool
 async def search_knowledge(
@@ -184,6 +186,7 @@ The only exception is `AssistantContractError` from the AI agent service, which 
 # app/services/ai/agent_service.py
 if not isinstance(output, AssistantResponse):
     raise AssistantContractError("Assistant returned an unexpected output type")
+
 
 # app/api/errors.py
 async def handle_assistant_contract_error(
@@ -273,9 +276,19 @@ They test deterministic logic in isolation:
 ```python
 # tests/unit/test_chunking.py
 def test_chunker_respects_max_size() -> None:
-    chunks = chunk_text(text, max_chunk_size=100, overlap=10)
+    chunks = chunk_text(text, chunk_size=100, overlap=10)
     assert all(len(c) <= 100 for c in chunks)
 ```
+
+Unit tests may exercise the HTTP layer with `TestClient(app)` **without** the
+`with` block, so the lifespan (and therefore the database pool) never runs.
+Override `get_app_context` through `app.dependency_overrides` and monkeypatch
+the service function the router calls; see `tests/unit/test_api_errors.py`.
+
+Every bug fixed in this repository has a regression test named after the
+behaviour it protects (`test_missing_app_env_fails_settings_loading`,
+`test_large_overlap_with_uniform_tokens_has_bounded_chunk_count`, ...). Add
+one before fixing the next bug.
 
 Run with:
 
@@ -287,26 +300,13 @@ pytest tests/unit -v
 
 Integration tests are located in `tests/integration/` and **require a real PostgreSQL database** with pgvector enabled.
 
-They test multiple components working together, especially tenant isolation:
-
-```python
-# tests/integration/test_tenant_isolation.py
-async def test_cannot_retrieve_other_tenant_chunks(
-    db: AsyncConnection,
-) -> None:
-    # Create chunks for tenant A
-    await create_document_with_chunks(
-        tenant_id=tenant_a, chunks=["secret"], embeddings=[...]
-    )
-
-    # Try to retrieve as tenant B
-    results = await search_similar_chunks(
-        tenant_id=tenant_b, embedding=..., limit=5, max_distance=0.8
-    )
-
-    # Tenant B sees no results
-    assert len(results) == 0
-```
+They test multiple components working together, especially tenant isolation.
+`tests/integration/test_tenant_isolation.py` inserts two tenants with the
+same embedding vector through raw SQL, calls the real `search_similar_chunks`
+repository function as tenant A and asserts tenant B's chunk never appears.
+Two further tests prove the database itself rejects a document owned by a user
+from another tenant and a chunk attached to a document from another tenant.
+Each test cleans up with `DELETE FROM tenants`, which cascades.
 
 Run with:
 

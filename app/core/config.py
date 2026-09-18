@@ -28,7 +28,7 @@ platform rather than shipping a `.env` file.
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Contract between the configured embedding model and the fixed
@@ -88,7 +88,7 @@ class AISettings(BaseSettings):
     the database pool) never requires an OpenAI API key.
     """
 
-    openai_api_key: str
+    openai_api_key: str = Field(min_length=1)
     openai_model: str = "gpt-5.6-luna"
     openai_embedding_model: str = "text-embedding-3-small"
 

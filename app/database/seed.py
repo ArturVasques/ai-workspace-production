@@ -49,15 +49,14 @@ async def seed() -> None:
                         email
                     )
                     VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (tenant_id, external_identity_id)
-                    DO NOTHING
+                    ON CONFLICT (id) DO NOTHING
                     """,
                 (
                     USER_ID,
                     TENANT_ID,
-                    "local-artur",
-                    "Artur",
-                    "local@example.com",
+                    "local-developer",
+                    "Local Developer",
+                    "developer@example.com",
                 ),
             )
 
